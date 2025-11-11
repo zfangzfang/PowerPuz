@@ -91,7 +91,7 @@
                 title: "關卡 2：守護者聯盟暗號",
                 image: BASE_URL + "8.jpg",
                 hint: BASE_URL + "8a.jpg",
-                answer: "輪流停電組別Ｃ", 
+                answer: "輪流停電組別Ｃ", // 答案中的Ｃ為全形 (已在 checkAnswer 函數中處理相容性)
                 feedback: "恭喜！您找到了守護者之間的秘密聯絡代號。",
             },
             // Level 3: 環保影響值
@@ -115,6 +115,7 @@
                 title: "關卡 5：追蹤電力忍者",
                 image: BASE_URL + "13.jpg",
                 hint: BASE_URL + "14.jpg",
+                // 答案包含英文 KWH (已在 checkAnswer 函數中處理不分大小寫和全形半形)
                 answer: "1659度KWH", 
                 feedback: "成功！您掌握了能源的移動軌跡。",
             },
@@ -127,6 +128,20 @@
                 feedback: "大成功！您揭開了隱藏的節能小確幸！",
             },
         ];
+
+        // --- 字元處理函數：將全形轉為半形 ---
+        /**
+         * 將字串中的全形 (Full-width) 英文字母和數字轉換為半形 (Half-width)。
+         * 這是為了解決手機輸入時，全形和半形字元比對失敗的問題。
+         */
+        function toHalfWidth(str) {
+            // 匹配全形字母（Ａ-Ｚ, ａ-ｚ）和數字（０-９）
+            return str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
+                // 全形與半形之間有固定的 Unicode 偏移量 0xFEE0
+                return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+            });
+        }
+
 
         // --- 計時器邏輯 ---
 
@@ -225,9 +240,19 @@
                 return;
             }
 
-            // 清理答案：去除空格，統一大小寫，以便核對
-            const cleanInput = state.answerInput.trim().toLowerCase().replace(/[()（）]/g, '').replace(/ /g, '');
-            const cleanAnswer = currentData.answer.trim().toLowerCase().replace(/[()（）]/g, '').replace(/ /g, '');
+            // --- 答案清理與標準化 (處理全形、半形、大小寫和空格) ---
+            
+            // 1. 處理使用者輸入：轉換全形為半形、移除括號、轉小寫、移除所有空格
+            const cleanInput = toHalfWidth(state.answerInput.trim())
+                               .replace(/[()（）]/g, '') // 移除中文和英文括號
+                               .toLowerCase()           // 轉小寫 (處理 KWH 等大小寫問題)
+                               .replace(/ /g, '');       // 移除內部空格
+            
+            // 2. 處理標準答案 (使用相同標準化邏輯)
+            const cleanAnswer = toHalfWidth(currentData.answer.trim())
+                                .replace(/[()（）]/g, '')
+                                .toLowerCase()
+                                .replace(/ /g, '');
 
             // 答案核對
             if (cleanInput === cleanAnswer) {
