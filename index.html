@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>節能守護者—破解能源密碼</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Google Font: Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* 設定全域字體和背景 */
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            /* 能源/節能的藍綠色調 */
+            background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%); 
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        /* 主遊戲容器樣式 */
+        #app {
+            width: 100%;
+            max-width: 600px; 
+            background-color: white;
+            border-radius: 1.5rem; 
+            box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            padding: 1.5rem;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+        /* 按鈕 active 效果 */
+        button:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <div class="text-center py-8 text-gray-500">載入中...</div>
+    </div>
+
+    <script>
+        // 設計者：何莉芳zfang 2024.12
+        
+        // --- 全域變數與遊戲設定 ---
+
+        const GameState = {
+            COVER: 'COVER',     // 統一處理封面和說明頁 (共 3 步)
+            MENU: 'MENU',
+            LEVEL: 'LEVEL',
+            FINISHED: 'FINISHED',
+        };
+
+        let state = {
+            gameState: GameState.COVER, 
+            coverStep: 1,               
+            selectedLevelIndex: -1,     
+            startTime: null,
+            timerInterval: null,
+            elapsedTime: 0,
+            feedbackMessage: '',
+            hintVisible: false,
+            answerInput: '', 
+            levelsStatus: Array(6).fill(false), 
+            levelAttempts: Array(6).fill(0),    // 追蹤每個關卡的錯誤嘗試次數
+        };
+
+        // --- 圖片連結設定 (已轉換為 GitHub Raw 連結) ---
+        const BASE_URL = "https://raw.githubusercontent.com/zfangzfang/teachpic/main/";
+        const COVER_IMAGE_URL = BASE_URL + "2.jpg"; 
+        const INSTRUCTION_IMAGE_URL = BASE_URL + "3.jpg"; 
+        const SUCCESS_IMAGE_URL = BASE_URL + "17.jpg"; 
+        
+        // --- 關卡資料設定 ---
+        const LEVELS_DATA = [
+            // Level 1: 神秘身分編號
+            {
+                title: "關卡 1：神秘身分編號",
+                image: BASE_URL + "6.jpg", 
+                hint: BASE_URL + "7.jpg", 
+                answer: "電號774", 
+                feedback: "太棒了！您成功解鎖了電力編號！",
+            },
+            // Level 2: 守護者聯盟暗號
+            {
+                title: "關卡 2：守護者聯盟暗號",
+                image: BASE_URL + "8.jpg",
+                hint: BASE_URL + "8a.jpg",
+                answer: "輪流停電組別Ｃ", 
+                feedback: "恭喜！您找到了守護者之間的秘密聯絡代號。",
+            },
+            // Level 3: 環保影響值
+            {
+                title: "關卡 3：環保影響值",
+                image: BASE_URL + "9.jpg",
+                hint: BASE_URL + "10.jpg",
+                answer: "電力排碳量820公斤", 
+                feedback: "完美！您計算出了環境影響的關鍵數值。",
+            },
+            // Level 4: 他來了他又走了
+            {
+                title: "關卡 4：他來了他又走了",
+                image: BASE_URL + "11.jpg",
+                hint: BASE_URL + "12.jpg",
+                answer: "抄表日1130827", 
+                feedback: "找到了！您追蹤到了精確的抄表日期。",
+            },
+            // Level 5: 追蹤電力忍者
+            {
+                title: "關卡 5：追蹤電力忍者",
+                image: BASE_URL + "13.jpg",
+                hint: BASE_URL + "14.jpg",
+                answer: "1659度KWH", 
+                feedback: "成功！您掌握了能源的移動軌跡。",
+            },
+            // Level 6: 發現小確幸
+            {
+                title: "關卡 6：發現小確幸",
+                image: BASE_URL + "15.jpg",
+                hint: BASE_URL + "16.jpg",
+                answer: "節電獎勵0元", 
+                feedback: "大成功！您揭開了隱藏的節能小確幸！",
+            },
+        ];
+
+        // --- 計時器邏輯 ---
+
+        function startTimer() {
+            if (!state.startTime) { 
+                state.startTime = Date.now();
+                state.timerInterval = setInterval(updateTimerDisplay, 1000);
+            }
+        }
+
+        function stopTimer() {
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+            state.elapsedTime = Date.now() - state.startTime;
+        }
+
+        function updateTimerDisplay() {
+            const currentTime = Date.now();
+            state.elapsedTime = currentTime - state.startTime;
+            const timeElement = document.getElementById('timer-display');
+            if (timeElement) {
+                timeElement.textContent = formatTime(state.elapsedTime);
+            }
+        }
+
+        function formatTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+            const seconds = String(totalSeconds % 60).padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        }
+
+        // --- 遊戲邏輯與流程控制 ---
+
+        /** 導航至目標狀態，同時檢查是否完成所有關卡 */
+        function navigate(targetState) {
+            state.feedbackMessage = '';
+            state.hintVisible = false;
+            state.answerInput = '';
+
+            if (targetState === GameState.MENU) {
+                const completedCount = state.levelsStatus.filter(status => status).length;
+                if (completedCount === LEVELS_DATA.length) {
+                    stopTimer();
+                    state.gameState = GameState.FINISHED;
+                } else {
+                    state.gameState = targetState; 
+                    startTimer(); 
+                }
+            } else {
+                 state.gameState = targetState;
+            }
+            render();
+        }
+
+        /** 封面頁/說明頁的下一頁按鈕邏輯 */
+        function nextScreen() {
+            if (state.gameState === GameState.COVER) {
+                if (state.coverStep < 3) {
+                    state.coverStep++; 
+                    render();
+                } else {
+                    // 完成三頁說明後，進入主選單
+                    navigate(GameState.MENU);
+                }
+            }
+        }
+
+
+        /** 選擇關卡 */
+        function selectLevel(index) {
+            state.selectedLevelIndex = index;
+            state.gameState = GameState.LEVEL;
+            // 每次進入關卡，檢查是否已達錯誤次數，決定是否顯示提示按鈕
+            state.hintVisible = false; 
+            render();
+        }
+
+        /** 檢查答案 */
+        function checkAnswer() {
+            const levelIndex = state.selectedLevelIndex;
+            const currentData = LEVELS_DATA[levelIndex];
+
+            if (state.levelsStatus[levelIndex]) {
+                 state.feedbackMessage = '✅ 本關已完成，無需重複提交！';
+                 render();
+                 return;
+            }
+
+            if (!state.answerInput.trim()) {
+                state.feedbackMessage = '❌ 請先輸入答案！';
+                render();
+                return;
+            }
+
+            // 清理答案：去除空格，統一大小寫，以便核對
+            const cleanInput = state.answerInput.trim().toLowerCase().replace(/[()（）]/g, '').replace(/ /g, '');
+            const cleanAnswer = currentData.answer.trim().toLowerCase().replace(/[()（）]/g, '').replace(/ /g, '');
+
+            // 答案核對
+            if (cleanInput === cleanAnswer) {
+                state.feedbackMessage = `✅ 恭喜過關！${currentData.feedback}`;
+                state.levelsStatus[levelIndex] = true; 
+                state.levelAttempts[levelIndex] = 0; 
+                
+                setTimeout(() => {
+                    navigate(GameState.MENU);
+                }, 1500); 
+
+            } else {
+                // 錯誤邏輯：增加嘗試次數
+                state.levelAttempts[levelIndex]++;
+                
+                if (state.levelAttempts[levelIndex] >= 2) {
+                    state.feedbackMessage = '❌ 答案錯誤。已累積 2 次錯誤，現在可點擊「查看提示」！';
+                } else {
+                    state.feedbackMessage = `❌ 答案錯誤，請重新思考！ (第 ${state.levelAttempts[levelIndex]} 次嘗試)`;
+                }
+                render();
+            }
+        }
+
+        /** 顯示提示 */
+        function showHint() {
+            const levelIndex = state.selectedLevelIndex;
+            if (state.levelsStatus[levelIndex]) return; 
+            if (state.levelAttempts[levelIndex] < 2) {
+                 // 不應該發生，但作為防護
+                 state.feedbackMessage = '請至少錯誤 2 次才能查看提示！';
+                 render();
+                 return;
+            }
+            state.hintVisible = true;
+            state.feedbackMessage = '💡 提示已出現，請仔細查看！';
+            render();
+        }
+
+        /** 處理輸入框變化 */
+        function handleInput(event) {
+            state.answerInput = event.target.value;
+        }
+        
+        /** 處理圖片載入失敗，提供一般佔位圖作為最後的保障 */
+        function handleImageError(element) {
+            element.onerror = null; 
+            element.src = 'https://placehold.co/600x300/6b7280/fff?text=圖片載入失敗';
+            element.classList.add('border-4', 'border-gray-500');
+        }
+
+        // --- 渲染函數 (HTML 模板) ---
+        
+        /** 渲染封面/說明頁面 (共 3 頁) */
+        function renderCover() {
+            let title = '';
+            let content = '';
+            let image = '';
+            // 將 GO 放在最後一步
+            let buttonText = (state.coverStep < 3) ? '進入下一頁' : "🔥 GO！進入主選單 (開始計時)"; 
+            
+            // 根據 coverStep 決定內容
+            switch (state.coverStep) {
+                case 1:
+                    title = "節能守護者—破解能源密碼";
+                    content = `<p class="text-xl font-bold text-teal-600 mb-4">讀懂電費單 2.0 版</p>
+                               <p class="text-sm text-gray-500 mb-4">設計者：何莉芳zfang 2024.12</p>
+                               <p class="text-lg text-gray-700">歡迎來到能源知識的試煉！您準備好成為節能守護者了嗎？</p>`;
+                    image = COVER_IMAGE_URL;
+                    break;
+                case 2:
+                    title = "遊戲說明與規則";
+                    content = `
+                        <p class="text-lg text-gray-700 font-semibold mb-4">六個關卡可以不按照順序挑戰。</p>
+                        <p class="text-red-500 font-bold mb-4">注意：問題的答案可能包含中文與數字。</p>
+                        <ul class="list-disc list-inside text-left space-y-2 text-gray-700 ml-4">
+                            <li>答錯 <span class="text-indigo-600 font-bold">2 次</span> 後，即可點擊按鈕查看提示。</li>
+                            <li>任務完成後，節能守護石將恢復力量！</li>
+                        </ul>
+                    `;
+                    image = INSTRUCTION_IMAGE_URL; 
+                    break;
+                case 3:
+                    title = "準備啟動任務";
+                    content = '<p class="text-xl font-bold text-red-600">計時器將在您點擊「GO」出發後立即啟動！</p><p class="mt-2 text-gray-600">祝您順利完成能源守護者的試煉！</p>';
+                    image = COVER_IMAGE_URL; // 保持第一頁圖片或替換為您準備的第三張圖
+                    break;
+                default:
+                    title = "發生未預期的錯誤";
+                    content = "<p>請重新載入遊戲。</p>";
+                    image = "https://placehold.co/600x300/ff0000/fff?text=錯誤";
+            }
+            
+            return `
+                <div class="flex-grow flex flex-col justify-center items-center p-4 text-center">
+                    <h1 class="text-3xl font-extrabold text-gray-800 mb-6">${title}</h1>
+                    <img src="${image}" alt="${title}" 
+                         onerror="handleImageError(this)"
+                         class="w-full h-auto object-cover rounded-xl shadow-lg mb-6">
+                    <div class="text-lg mb-8">${content}</div>
+                </div>
+                <button onclick="nextScreen()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-full transition duration-300 shadow-xl">
+                    ${buttonText}
+                </button>
+            `;
+        }
+
+        /** 渲染主選單頁面 (隨機選擇關卡) */
+        function renderMenu() {
+            const totalLevels = LEVELS_DATA.length;
+            const completedCount = state.levelsStatus.filter(status => status).length;
+
+            return `
+                <div class="flex justify-between items-center mb-6 pb-2 border-b-4 border-teal-500">
+                    <h1 class="text-3xl font-extrabold text-teal-700">🎯 密碼挑戰主選單</h1>
+                    <div id="timer-display" class="text-xl font-mono text-red-600 bg-red-100 px-3 py-1 rounded-lg shadow-inner border border-red-300">
+                        ${state.startTime ? formatTime(state.elapsedTime) : '00:00:00'}
+                    </div>
+                </div>
+                
+                <p class="text-lg font-semibold text-gray-600 mb-6">
+                    已解鎖：<span class="text-green-600 font-extrabold">${completedCount}</span> / ${totalLevels} 關
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-y-auto">
+                    ${LEVELS_DATA.map((level, index) => {
+                        const isCompleted = state.levelsStatus[index];
+                        const statusClass = isCompleted ? 'bg-green-500 hover:bg-green-600' : 'bg-indigo-500 hover:bg-indigo-600';
+                        const icon = isCompleted ? '✅' : '🔒';
+
+                        return `
+                            <button onclick="selectLevel(${index})" 
+                                class="${statusClass} text-white font-bold py-4 px-4 rounded-xl shadow-lg transition duration-300 text-left flex items-center justify-between transform hover:scale-[1.02]">
+                                <div>
+                                    <span class="text-xs font-light opacity-80">${isCompleted ? '能源恢復' : '等待挑戰'}</span>
+                                    <p class="text-xl font-extrabold">${level.title}</p>
+                                </div>
+                                <span class="text-3xl ml-3">${icon}</span>
+                            </button>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        /** 渲染關卡頁面 */
+        function renderLevel() {
+            const levelIndex = state.selectedLevelIndex;
+            const currentData = LEVELS_DATA[levelIndex];
+            const isCompleted = state.levelsStatus[levelIndex];
+
+            // 渲染提示區塊
+            const hintSection = state.hintVisible 
+                ? `<div class="mt-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-lg shadow-inner">
+                    <p class="font-bold text-yellow-700 mb-2">💡 守護者提示：</p>
+                    <img src="${currentData.hint}" alt="Hint Image" 
+                         onerror="handleImageError(this)"
+                         class="w-full h-auto object-cover rounded-md">
+                </div>` 
+                : '';
+                
+            const completionMessage = isCompleted 
+                ? `<div class="p-3 bg-green-100 text-green-700 font-bold rounded-lg mb-4 text-center">
+                    ✅ 密碼已破解！ (答案：${currentData.answer})
+                   </div>`
+                : '';
+            
+            // 提示按鈕的邏輯：答錯 2 次才能點擊
+            const attempts = state.levelAttempts[levelIndex];
+            const showHintButton = (() => {
+                if (state.hintVisible) {
+                    return `<button disabled class="w-full bg-yellow-400 text-yellow-900 font-bold py-3 rounded-full shadow-md">
+                        💡 提示已顯示
+                    </button>`;
+                } else if (isCompleted) {
+                    return `<button disabled class="w-full bg-gray-200 text-gray-500 font-bold py-3 rounded-full">
+                        ✅ 本關已過，無需提示
+                    </button>`;
+                } else if (attempts >= 2) {
+                    return `<button onclick="showHint()" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-full shadow-lg transition duration-300">
+                        💡 查看提示 (已錯誤 ${attempts} 次)
+                    </button>`;
+                } else {
+                    return `<button disabled class="w-full bg-gray-100 text-gray-500 font-bold py-3 rounded-full shadow-inner">
+                        ❌ 錯誤 ${2 - attempts} 次後可查看提示
+                    </button>`;
+                }
+            })();
+
+
+            return `
+                <div class="flex flex-col flex-grow">
+                    <div class="flex justify-between items-center mb-4 border-b-2 border-indigo-400 pb-2">
+                        <h2 class="text-2xl font-extrabold text-indigo-700">${currentData.title}</h2>
+                        <div id="timer-display" class="text-xl font-mono text-red-600 bg-red-100 px-3 py-1 rounded-lg shadow-inner border border-red-300">
+                            ${formatTime(state.elapsedTime)}
+                        </div>
+                    </div>
+
+                    <div class="flex-grow overflow-y-auto pb-4">
+                        ${completionMessage}
+                        <p class="text-gray-700 mb-4 font-semibold">請觀察圖片，找出正確的能源密碼：</p>
+                        <!-- 題目圖片區塊 -->
+                        <img src="${currentData.image}" alt="Puzzle Image" 
+                            onerror="handleImageError(this)"
+                            class="w-full h-auto object-cover rounded-xl shadow-2xl">
+
+                        ${hintSection}
+
+                        <!-- 答題與回饋區塊 -->
+                        <div class="mt-6">
+                            <div class="mt-4 h-10">
+                                <p class="${state.feedbackMessage.startsWith('✅') ? 'text-green-600' : 'text-red-600'} font-semibold text-lg">
+                                    ${state.feedbackMessage}
+                                </p>
+                            </div>
+                            
+                            <label for="answerInput" class="block text-sm font-medium text-gray-700 mb-2">輸入您的密碼</label>
+                            <input type="text" id="answerInput" oninput="handleInput(event)" value="${state.answerInput}"
+                                ${isCompleted ? 'disabled' : ''}
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-4 focus:ring-indigo-400 text-gray-900 disabled:bg-gray-100 disabled:text-gray-500 transition duration-150" 
+                                placeholder="請在這裡輸入密碼...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 底部按鈕區塊 -->
+                <div class="mt-4 space-y-3">
+                    ${!isCompleted ? 
+                        `<button onclick="checkAnswer()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-full shadow-xl transition duration-300">
+                            🔑 提交答案
+                        </button>`
+                        : ''
+                    }
+                    ${showHintButton}
+                    <button onclick="navigate(GameState.MENU)" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 rounded-full shadow-lg transition duration-300">
+                        🔙 返回主選單
+                    </button>
+                </div>
+            `;
+        }
+
+        /** 渲染 Finished 頁面 (結算) */
+        function renderFinished() {
+            const finalTime = formatTime(state.elapsedTime);
+            return `
+                <div class="flex-grow flex flex-col justify-center items-center p-4 text-center">
+                    <div class="text-7xl mb-6">🏆</div>
+                    <h1 class="text-4xl font-extrabold text-green-600 mb-4">恭喜！所有密碼破解成功！</h1>
+                    <p class="text-xl text-gray-700 mb-6">您成功解鎖了所有 6 個能源密碼，節能守護石恢復了力量！</p>
+                    
+                    <!-- 挑戰成功畫面圖片 -->
+                    <img src="${SUCCESS_IMAGE_URL}" alt="Challenge Success Image" 
+                         onerror="handleImageError(this)"
+                         class="w-full max-w-sm h-auto object-cover rounded-xl shadow-2xl mb-8">
+
+                    <div class="bg-white p-6 rounded-xl shadow-2xl border-4 border-green-500 w-full max-w-xs">
+                        <p class="text-lg font-semibold text-gray-600 mb-2">最終耗時：</p>
+                        <p class="text-5xl font-mono font-bold text-green-700">${finalTime}</p>
+                    </div>
+
+                    <button onclick="window.location.reload()" class="mt-10 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-full transition duration-300 shadow-lg">
+                        重新開始遊戲
+                    </button>
+                </div>
+            `;
+        }
+
+        /** 主要渲染函數 */
+        function render() {
+            const app = document.getElementById('app');
+            let content = '';
+
+            switch (state.gameState) {
+                case GameState.COVER:
+                    content = renderCover();
+                    break;
+                case GameState.MENU:
+                    content = renderMenu();
+                    break;
+                case GameState.LEVEL:
+                    content = renderLevel();
+                    break;
+                case GameState.FINISHED:
+                    content = renderFinished();
+                    break;
+                default:
+                    content = '<div class="text-center py-8 text-red-500 font-bold">發生了未知的狀態錯誤！請重新整理。</div>';
+            }
+
+            app.innerHTML = content;
+
+            // 確保每次重新渲染後，輸入框的值和事件監聽器正確設置
+            const inputElement = document.getElementById('answerInput');
+            if (inputElement) {
+                inputElement.value = state.answerInput;
+                inputElement.addEventListener('input', handleInput);
+            }
+        }
+
+        // --- 啟動遊戲 ---
+        window.onload = render;
+
+    </script>
+</body>
+</html>
