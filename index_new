@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>節能守護者—破解能源密碼</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%); 
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        #app {
+            width: 100%;
+            max-width: 600px; 
+            background-color: white;
+            border-radius: 1.5rem; 
+            box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            padding: 1.5rem;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        /* 視覺上的 HOLIYO 格子區 */
+        .visual-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin: 20px 0;
+        }
+        .visual-cell {
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #cbd5e1;
+            border-radius: 0.5rem;
+            background-color: #f8fafc;
+            font-size: 1.3rem;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            color: #1e293b;
+        }
+        /* 當前正在打字的位置 */
+        .visual-cell.active {
+            border-color: #0ea5e9;
+            background-color: #f0f9ff;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+        }
+        /* 已有內容的格子 */
+        .visual-cell.filled {
+            border-color: #64748b;
+            background-color: white;
+        }
+
+        /* 實際打字用的標準輸入框 */
+        .answer-input-field {
+            width: 100%;
+            max-width: 320px;
+            padding: 12px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 0.75rem;
+            text-align: center;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            margin: 0 auto;
+            display: block;
+            transition: border-color 0.2s;
+        }
+        .answer-input-field:focus {
+            border-color: #0ea5e9;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+        }
+
+        @media (max-width: 450px) {
+            .visual-cell {
+                width: 38px;
+                height: 38px;
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <div class="text-center py-8 text-gray-500">載入中...</div>
+    </div>
+
+    <script>
+        // 設計者：何莉芳zfang 2024.12
+        
+        const GameState = {
+            COVER: 'COVER',
+            MENU: 'MENU',
+            LEVEL: 'LEVEL',
+            FINISHED: 'FINISHED',
+        };
+
+        let state = {
+            gameState: GameState.COVER, 
+            coverStep: 1,               
+            selectedLevelIndex: -1,     
+            startTime: null,
+            timerInterval: null,
+            elapsedTime: 0,
+            feedbackMessage: '',
+            hintVisible: false,
+            answerText: '', // 儲存完整輸入
+            levelsStatus: Array(6).fill(false), 
+            levelAttempts: Array(6).fill(0),
+        };
+
+        const BASE_URL = "https://raw.githubusercontent.com/zfangzfang/teachpic/main/";
+        const COVER_IMAGE_URL = BASE_URL + "2.jpg"; 
+        const INSTRUCTION_IMAGE_URL = BASE_URL + "3.jpg"; 
+        const SUCCESS_IMAGE_URL = BASE_URL + "17.jpg"; 
+        
+        const LEVELS_DATA = [
+            { title: "關卡 1：神秘身分編號", image: BASE_URL + "6.jpg", hint: BASE_URL + "7.jpg", answer: "電號774", feedback: "太棒了！您成功解鎖了電力編號！" },
+            { title: "關卡 2：守護者聯盟暗號", image: BASE_URL + "8.jpg", hint: BASE_URL + "8a.jpg", answer: "輪流停電組別Ｃ", feedback: "恭喜！您找到了守護者之間的秘密聯絡代號。" },
+            { title: "關卡 3：環保影響值", image: BASE_URL + "9.jpg", hint: BASE_URL + "10.jpg", answer: "電力排碳量820公斤", feedback: "完美！您計算出了環境影響的關鍵數值。" },
+            { title: "關卡 4：他來了他又走了", image: BASE_URL + "11.jpg", hint: BASE_URL + "12.jpg", answer: "抄表日1130827", feedback: "找到了！您追蹤到了精確的抄表日期。" },
+            { title: "關卡 5：追蹤電力忍者", image: BASE_URL + "13.jpg", hint: BASE_URL + "14.jpg", answer: "1659度KWH", feedback: "成功！您掌握了能源的移動軌跡。" },
+            { title: "關卡 6：發現小確幸", image: BASE_URL + "15.jpg", hint: BASE_URL + "16.jpg", answer: "節電獎勵0元", feedback: "大成功！您揭開了隱藏的節能小確幸！" },
+        ];
+
+        function toHalfWidth(str) {
+            return str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
+                return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+            });
+        }
+
+        function formatTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+            const seconds = String(totalSeconds % 60).padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        }
+
+        function updateTimerDisplay() {
+            const currentTime = Date.now();
+            state.elapsedTime = currentTime - state.startTime;
+            const timeElement = document.getElementById('timer-display');
+            if (timeElement) timeElement.textContent = formatTime(state.elapsedTime);
+        }
+
+        function startTimer() {
+            if (!state.startTime) { 
+                state.startTime = Date.now();
+                state.timerInterval = setInterval(updateTimerDisplay, 1000);
+            }
+        }
+
+        function stopTimer() {
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+            state.elapsedTime = Date.now() - state.startTime;
+        }
+
+        function navigate(targetState) {
+            state.feedbackMessage = '';
+            state.hintVisible = false;
+            state.answerText = '';
+            if (targetState === GameState.MENU) {
+                const completedCount = state.levelsStatus.filter(status => status).length;
+                if (completedCount === LEVELS_DATA.length) {
+                    stopTimer();
+                    state.gameState = GameState.FINISHED;
+                } else {
+                    state.gameState = targetState; 
+                    startTimer(); 
+                }
+            } else {
+                state.gameState = targetState;
+            }
+            render();
+        }
+
+        function nextScreen() {
+            if (state.gameState === GameState.COVER) {
+                if (state.coverStep < 3) {
+                    state.coverStep++; 
+                    render();
+                } else {
+                    navigate(GameState.MENU);
+                }
+            }
+        }
+
+        function selectLevel(index) {
+            state.selectedLevelIndex = index;
+            state.gameState = GameState.LEVEL;
+            state.hintVisible = false; 
+            state.answerText = '';
+            render();
+            setTimeout(() => {
+                const input = document.getElementById('answer-input');
+                if (input) input.focus();
+            }, 50);
+        }
+
+        function handleInput(e) {
+            const currentData = LEVELS_DATA[state.selectedLevelIndex];
+            const maxLen = currentData.answer.length;
+            
+            // 為了支援組字過程，不在此處截斷長度。
+            // 僅設定一個極大的上限防止異常
+            let val = e.target.value;
+            if (val.length > 50) {
+                val = val.substring(0, 50);
+                e.target.value = val;
+            }
+            
+            state.answerText = val;
+            
+            // 即時同步到上方的視覺格子
+            const cells = document.querySelectorAll('.visual-cell');
+            cells.forEach((cell, idx) => {
+                const char = val[idx] || '';
+                cell.textContent = char;
+                // 如果目前的字元位置在格子範圍內，更新樣式
+                cell.className = `visual-cell ${char ? 'filled' : ''} ${idx === val.length && val.length < maxLen ? 'active' : ''}`;
+            });
+        }
+
+        function checkAnswer() {
+            const levelIndex = state.selectedLevelIndex;
+            const currentData = LEVELS_DATA[levelIndex];
+            
+            if (!state.answerText.trim()) {
+                state.feedbackMessage = '❌ 請先輸入答案！';
+                render();
+                return;
+            }
+
+            // 比對時才進行清理，確保包含空格、全形、大小寫皆能通過
+            const cleanInput = toHalfWidth(state.answerText.trim()).toLowerCase().replace(/ /g, '');
+            const cleanAnswer = toHalfWidth(currentData.answer.trim()).toLowerCase().replace(/ /g, '');
+            
+            if (cleanInput === cleanAnswer) {
+                state.feedbackMessage = `✅ 恭喜過關！${currentData.feedback}`;
+                state.levelsStatus[levelIndex] = true; 
+                state.levelAttempts[levelIndex] = 0; 
+                setTimeout(() => navigate(GameState.MENU), 1500); 
+            } else {
+                state.levelAttempts[levelIndex]++;
+                state.feedbackMessage = state.levelAttempts[levelIndex] >= 2 ? '❌ 答案錯誤。已累積 2 次錯誤，現在可查看提示！' : `❌ 答案錯誤，請重新思考！ (第 ${state.levelAttempts[levelIndex]} 次嘗試)`;
+                render();
+            }
+        }
+
+        function showHint() {
+            state.hintVisible = true;
+            state.feedbackMessage = '💡 提示已出現，請仔細查看！';
+            render();
+        }
+
+        function handleImageError(element) {
+            element.onerror = null; 
+            element.src = 'https://placehold.co/600x300/6b7280/fff?text=圖片載入失敗';
+        }
+
+        function renderCover() {
+            let title = '', content = '', image = '';
+            let buttonText = (state.coverStep < 3) ? '進入下一頁' : "🔥 GO！出發挑戰"; 
+            switch (state.coverStep) {
+                case 1:
+                    title = "節能守護者—破解能源密碼";
+                    content = `<p class="text-xl font-bold text-teal-600 mb-4">讀懂電費單 2.1 版</p>
+                               <p class="text-sm text-gray-500 mb-4 text-center">設計者：何莉芳zfang 2026.04更新</p>
+                               <p class="text-sm text-gray-500 mb-4 text-center">2024.12設計 2025.11修正</p>
+                               <p class="text-lg text-gray-700 text-center">歡迎來到能源知識的試煉！您準備好成為節能守護者了嗎？</p>`;
+                    image = COVER_IMAGE_URL;
+                    break;
+                case 2:
+                    title = "遊戲說明與規則";
+                    content = `<p class="text-lg text-gray-700 font-semibold mb-4 text-left">六個關卡可以不按照順序挑戰。</p>
+                               <ul class="list-disc list-inside text-left space-y-2 text-gray-700 ml-4">
+                                   <li>上方的方格代表最終答案字數。</li>
+                                   <li>請直接在下方的橫條框打字，組字完成後格子會自動同步。</li>
+                                   <li>答錯 <span class="text-indigo-600 font-bold">2 次</span> 後可查看提示。</li>
+                               </ul>`;
+                    image = INSTRUCTION_IMAGE_URL; 
+                    break;
+                case 3:
+                    title = "準備啟動任務";
+                    content = '<p class="text-xl font-bold text-red-600 text-center">計時器將在您點擊「GO」後立即啟動！</p><p class="mt-2 text-gray-600 text-center">祝您順利完成能源守護者的試煉！</p>';
+                    image = COVER_IMAGE_URL;
+                    break;
+            }
+            return `
+                <div class="flex-grow flex flex-col justify-center items-center p-4 text-center">
+                    <h1 class="text-3xl font-extrabold text-gray-800 mb-6">${title}</h1>
+                    <img src="${image}" onerror="handleImageError(this)" class="w-full h-auto object-cover rounded-xl shadow-lg mb-6">
+                    <div class="text-lg mb-8 text-center">${content}</div>
+                </div>
+                <button onclick="nextScreen()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-full transition duration-300 shadow-xl">${buttonText}</button>
+            `;
+        }
+
+        function renderMenu() {
+            const completedCount = state.levelsStatus.filter(status => status).length;
+            return `
+                <div class="flex justify-between items-center mb-6 pb-2 border-b-4 border-teal-500">
+                    <h1 class="text-3xl font-extrabold text-teal-700 text-left">🎯 挑戰選單</h1>
+                    <div id="timer-display" class="text-xl font-mono text-red-600 bg-red-100 px-3 py-1 rounded-lg shadow-inner border border-red-300">
+                        ${state.startTime ? formatTime(state.elapsedTime) : '00:00:00'}
+                    </div>
+                </div>
+                <p class="text-lg font-semibold text-gray-600 mb-6 text-left">已完成：<span class="text-green-600 font-extrabold">${completedCount}</span> / 6 關</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-grow overflow-y-auto">
+                    ${LEVELS_DATA.map((level, index) => `
+                        <button onclick="selectLevel(${index})" class="${state.levelsStatus[index] ? 'bg-green-500' : 'bg-indigo-500'} text-white font-bold py-4 px-4 rounded-xl shadow-lg flex items-center justify-between transition-all">
+                            <span class="text-xl font-extrabold text-left">${level.title}</span>
+                            <span class="text-3xl ml-2">${state.levelsStatus[index] ? '✅' : '🔒'}</span>
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderLevel() {
+            const levelIndex = state.selectedLevelIndex;
+            const currentData = LEVELS_DATA[levelIndex];
+            const isCompleted = state.levelsStatus[levelIndex];
+            const attempts = state.levelAttempts[levelIndex];
+            const answerLen = currentData.answer.length;
+
+            const hintSection = state.hintVisible 
+                ? `<div class="mt-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-lg shadow-inner text-center">
+                    <p class="font-bold text-yellow-700 mb-2">💡 守護者提示：</p>
+                    <img src="${currentData.hint}" onerror="handleImageError(this)" class="inline-block w-full h-auto object-cover rounded-md">
+                </div>` : '';
+
+            return `
+                <div class="flex flex-col flex-grow">
+                    <div class="flex justify-between items-center mb-4 border-b-2 border-indigo-400 pb-2">
+                        <h2 class="text-2xl font-extrabold text-indigo-700 text-left">${currentData.title}</h2>
+                        <div id="timer-display" class="text-xl font-mono text-red-600 bg-red-100 px-3 py-1 rounded-lg shadow-inner border border-red-300">
+                            ${formatTime(state.elapsedTime)}
+                        </div>
+                    </div>
+                    <div class="flex-grow overflow-y-auto pb-4">
+                        <img src="${currentData.image}" onerror="handleImageError(this)" class="w-full h-auto object-cover rounded-xl shadow-2xl mb-6">
+                        
+                        ${hintSection}
+
+                        <div class="mt-8 text-center px-2">
+                            <p class="text-gray-700 mb-4 font-bold">請輸入正確答案 (${answerLen} 個字)：</p>
+                            
+                            <!-- 視覺上的 HOLIYO 格子區 -->
+                            <div class="visual-grid">
+                                ${Array.from({length: answerLen}).map((_, i) => `
+                                    <div class="visual-cell ${state.answerText[i] ? 'filled' : ''} ${i === state.answerText.length && !isCompleted ? 'active' : ''}">
+                                        ${state.answerText[i] || ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+
+                            <!-- 實際輸入框：移除限制，支援注音組字 -->
+                            <input 
+                                type="text" 
+                                id="answer-input"
+                                class="answer-input-field"
+                                placeholder="在此打字..."
+                                oninput="handleInput(event)"
+                                onkeydown="if(event.key==='Enter') checkAnswer()"
+                                value="${state.answerText}"
+                                ${isCompleted ? 'disabled' : ''}
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+
+                            <div class="h-10 mt-4">
+                                <p class="${state.feedbackMessage.startsWith('✅') ? 'text-green-600' : 'text-red-600'} font-semibold text-lg text-center">
+                                    ${state.feedbackMessage}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 space-y-3">
+                    ${!isCompleted ? `<button onclick="checkAnswer()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-full shadow-xl">🔑 提交答案</button>` : ''}
+                    ${attempts >= 2 && !state.hintVisible && !isCompleted ? `<button onclick="showHint()" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-full shadow-lg">💡 查看提示</button>` : ''}
+                    <button onclick="navigate(GameState.MENU)" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 rounded-full shadow-lg">🔙 返回選單</button>
+                </div>
+            `;
+        }
+
+        function renderFinished() {
+            return `
+                <div class="flex-grow flex flex-col justify-center items-center p-4 text-center">
+                    <h1 class="text-4xl font-extrabold text-green-600 mb-4">🏆 任務大成功！</h1>
+                    <p class="text-xl text-gray-700 mb-6 text-center">任務完成後，節能守護石將恢復力量！</p>
+                    <img src="${SUCCESS_IMAGE_URL}" onerror="handleImageError(this)" class="w-full max-w-sm rounded-xl shadow-2xl mb-8">
+                    <div class="bg-white p-6 rounded-xl shadow-2xl border-4 border-green-500 w-full max-w-xs mx-auto">
+                        <p class="text-lg text-gray-600 mb-2 font-bold">最終耗時：</p>
+                        <p class="text-5xl font-mono font-bold text-green-700">${formatTime(state.elapsedTime)}</p>
+                    </div>
+                    <button onclick="window.location.reload()" class="mt-10 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-full shadow-lg">重新開始</button>
+                </div>
+            `;
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            if (!app) return;
+            switch (state.gameState) {
+                case GameState.COVER: app.innerHTML = renderCover(); break;
+                case GameState.MENU: app.innerHTML = renderMenu(); break;
+                case GameState.LEVEL: app.innerHTML = renderLevel(); break;
+                case GameState.FINISHED: app.innerHTML = renderFinished(); break;
+            }
+        }
+        window.onload = render;
+    </script>
+</body>
+</html>
